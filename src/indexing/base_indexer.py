@@ -8,12 +8,51 @@ from util.chunker import Chunker, Chunk
 
 load_dotenv()
 
+class _VLLMEmbeddingFunction:
+    """Embedding function wrapper for local vLLM /v1/embeddings endpoint.
+    
+    Used when OPENAI_EMBEDDING_BASE_URL is set (e.g., Qwen3-Embedding-8B on port 8029).
+    Mimics the interface of pymilvus OpenAIEmbeddingFunction.
+    """
+    def __init__(self, model_name: str, base_url: str, api_key: str, dimensions: int):
+        from openai import OpenAI
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.model_name = model_name
+        self.dimensions = dimensions
+
+    def encode_documents(self, texts: list) -> list:
+        response = self.client.embeddings.create(
+            model=self.model_name,
+            input=texts,
+            encoding_format="float"
+        )
+        return [item.embedding for item in response.data]
+
+    def encode_queries(self, texts: list) -> list:
+        return self.encode_documents(texts)
+
+
 class BaseIndexer:
     def __init__(self):
-        self.embedding_fn = OpenAIEmbeddingFunction(model_name=EMBEDDING_MODEL, dimensions=EMBEDDING_DIMENSIONS)
+        embedding_base_url = os.getenv('OPENAI_EMBEDDING_BASE_URL')
+        embedding_api_key = os.getenv('OPENAI_EMBEDDING_API_KEY', os.getenv('OPENAI_API_KEY', 'sk-local-vllm'))
+
+        if embedding_base_url:
+            # Use local vLLM embedding service (e.g., Qwen3-Embedding-8B)
+            print(f"[BaseIndexer] Using local embedding service: {embedding_base_url} model={EMBEDDING_MODEL} dim={EMBEDDING_DIMENSIONS}")
+            self.embedding_fn = _VLLMEmbeddingFunction(
+                model_name=EMBEDDING_MODEL,
+                base_url=embedding_base_url,
+                api_key=embedding_api_key,
+                dimensions=EMBEDDING_DIMENSIONS,
+            )
+        else:
+            # Default: PyMilvus OpenAIEmbeddingFunction (cloud OpenAI)
+            self.embedding_fn = OpenAIEmbeddingFunction(model_name=EMBEDDING_MODEL, dimensions=EMBEDDING_DIMENSIONS)
+
         self.client = None
         self.chunker = Chunker()
-        
+
     def index_data(self, data_files):
         raise NotImplementedError("Subclasses must implement this method.")
     

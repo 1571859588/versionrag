@@ -1,5 +1,5 @@
-pymilvus        # vector database
-pymilvus[model] # vector database
+pymilvus[milvus_lite]  # vector database (includes milvus-lite for local mode)
+pymilvus[model]        # vector database
 neo4j           # graph database
 neo4j_graphrag  # graph rag
 python-dotenv   # env variables

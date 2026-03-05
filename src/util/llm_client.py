@@ -14,7 +14,14 @@ class LLMClient:
         self.json_format = json_format
         
         if LLM_MODE == 'openai':
-            self.client = OpenAI()
+            # Support custom base_url for local vLLM or OpenAI-compatible services
+            openai_kwargs = {}
+            base_url = os.getenv('OPENAI_BASE_URL')
+            api_key = os.getenv('OPENAI_API_KEY', 'sk-local-vllm')
+            if base_url:
+                openai_kwargs['base_url'] = base_url
+            openai_kwargs['api_key'] = api_key
+            self.client = OpenAI(**openai_kwargs)
         elif LLM_MODE == 'groq':
             self.client = GROQLLM(response_format_json=json_format, temp=temp)
         else:
@@ -23,12 +30,15 @@ class LLMClient:
                 raise ValueError("LLM_OFFLINE_MODEL is not set in the environment variables.")
             
             self.client = lms.llm(self.model)
+
     
 
     def generate(self, system_prompt: str, user_prompt: str):
         if LLM_MODE == 'openai':
+            # Model name configurable via VERSIONRAG_LLM_MODEL env var
+            model_name = os.getenv('VERSIONRAG_LLM_MODEL', 'gpt-4o-mini')
             kwargs = {
-                "model": "gpt-4o-mini",
+                "model": model_name,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}

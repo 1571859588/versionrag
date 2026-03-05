@@ -4,8 +4,9 @@ from util.llm_client import LLMClient
 from pymilvus import MilvusClient
 from pymilvus.model.dense import OpenAIEmbeddingFunction
 from retrieval.base_retriever import RetrievedData
-from util.constants import MILVUS_DB_PATH, MILVUS_COLLECTION_NAME_VersionRAG, MILVUS_META_ATTRIBUTE_TEXT, MILVUS_META_ATTRIBUTE_PAGE, MILVUS_META_ATTRIBUTE_FILE, MILVUS_META_ATTRIBUTE_CATEGORY, MILVUS_META_ATTRIBUTE_DOCUMENTATION, MILVUS_META_ATTRIBUTE_VERSION, MILVUS_META_ATTRIBUTE_TYPE, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS
+from util.constants import MILVUS_DB_PATH, MILVUS_COLLECTION_NAME_VERSIONRAG, MILVUS_META_ATTRIBUTE_TEXT, MILVUS_META_ATTRIBUTE_PAGE, MILVUS_META_ATTRIBUTE_FILE, MILVUS_META_ATTRIBUTE_CATEGORY, MILVUS_META_ATTRIBUTE_DOCUMENTATION, MILVUS_META_ATTRIBUTE_VERSION, MILVUS_META_ATTRIBUTE_TYPE, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS
 from dotenv import load_dotenv
+import os
 load_dotenv()
 
 class RetrievalType(Enum):
@@ -23,7 +24,29 @@ class VersionRAGRetrieverDatabase:
         self.graph = GraphClient()
         self.llm_client = LLMClient()
         self.vdb = MilvusClient(MILVUS_DB_PATH)
-        self.vdb_embedding = OpenAIEmbeddingFunction(model_name=EMBEDDING_MODEL, dimensions=EMBEDDING_DIMENSIONS)
+
+        # Support local vLLM embedding service (same env vars as base_indexer)
+        embedding_base_url = os.getenv('OPENAI_EMBEDDING_BASE_URL')
+        embedding_api_key = os.getenv('OPENAI_EMBEDDING_API_KEY', os.getenv('OPENAI_API_KEY', 'sk-local-vllm'))
+        if embedding_base_url:
+            from openai import OpenAI
+            _client = OpenAI(api_key=embedding_api_key, base_url=embedding_base_url)
+            _model = EMBEDDING_MODEL
+
+            class _VLLMEmb:
+                def __init__(self, client, model):
+                    self._client = client
+                    self._model = model
+                def encode_queries(self, texts):
+                    r = self._client.embeddings.create(model=self._model, input=texts, encoding_format="float")
+                    return [item.embedding for item in r.data]
+                def encode_documents(self, texts):
+                    return self.encode_queries(texts)
+
+            self.vdb_embedding = _VLLMEmb(_client, _model)
+        else:
+            self.vdb_embedding = OpenAIEmbeddingFunction(model_name=EMBEDDING_MODEL, dimensions=EMBEDDING_DIMENSIONS)
+
 
     def retrieve(self, params: RetrievalParam) -> RetrievedData:
         self.preprocess_params(params=params)
