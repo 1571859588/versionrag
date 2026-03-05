@@ -1,6 +1,6 @@
 from retrieval.base_retriever import BaseRetriever
-from retrieval.versionrag_retriever_db impoVersionRAGRAGRetrieverDatabase
-from retrieval.versionrag_retriever_parser impoVersionRAGRAGRetrieverParser
+from retrieval.versionrag_retriever_db import VersionRAGRetrieverDatabase
+from retrieval.versionrag_retriever_parser import VersionRAGRetrieverParser
 
 class VersionRAGRetriever(BaseRetriever):
     def __init__(self):
