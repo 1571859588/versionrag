@@ -37,6 +37,8 @@ import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
+import copy
+import socket
 
 # ---------------------------------------------------------------------------
 # Path setup: must run from baselines/versionrag/src/ or we add src to path
@@ -44,6 +46,10 @@ from pathlib import Path
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
+
+PROJECT_SRC = os.path.abspath(os.path.join(SRC_DIR, "../../../src"))
+if PROJECT_SRC not in sys.path:
+    sys.path.insert(0, PROJECT_SRC)
 
 # Load .env from src/
 from dotenv import load_dotenv
@@ -55,6 +61,10 @@ else:
     load_dotenv()  # fallback to shell env
     print(f"[ENV] .env not found at {dotenv_path}, using shell environment")
 
+try:
+    from config.prompts import get_baseline_generation_append
+except ImportError:
+    pass
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -68,8 +78,12 @@ def parse_args():
                         help="Path to ground truth directory (qa_pairs.json etc.)")
     parser.add_argument("--output-dir", default="../../../results/versionRAG",
                         help="Output directory for results JSON")
+    parser.add_argument("--domain", default="tcl",
+                        help="Target script domain/language for code generation (e.g., tcl)")
     parser.add_argument("--rebuild", action="store_true",
                         help="Drop existing Milvus collection and re-index")
+    parser.add_argument("--query-only", action="store_true",
+                        help="Skip checking/indexing, only run queries against existing Milvus collection.")
     return parser.parse_args()
 
 
@@ -143,6 +157,8 @@ def main():
     log(f"  GT dir: {gt_dir}")
     log(f"  Output: {output_dir}")
     log(f"  Rebuild: {args.rebuild}")
+    log(f"  Domain: {args.domain}")
+    log(f"  Query-only: {args.query_only}")
 
     # ------------------------------------------------------------------
     # 1. Load Ground Truth
@@ -176,8 +192,10 @@ def main():
     kg_path = os.path.join(SRC_DIR, KNOWLEDGE_GRAPH_PATH)
     milvus_path = os.path.join(SRC_DIR, os.path.dirname(MILVUS_DB_PATH))
 
-    if os.path.exists(kg_path) and not args.rebuild:
+    if os.path.exists(kg_path) and not args.rebuild and not args.query_only:
         log("  -> Existing index detected (skip re-indexing). Use --rebuild to force.")
+    elif args.query_only:
+        log("  --query-only flag: skipping indexing phase.")
     else:
         log("  -> Running VersionRAGIndexer.index_data()...")
         from indexing.versionrag_indexer import VersionRAGIndexer
@@ -213,16 +231,20 @@ def main():
         sys.exit(1)
 
     qa_results = []
+    appender = get_baseline_generation_append(args.domain) if 'get_baseline_generation_append' in globals() else ""
     for idx, qa in enumerate(gt_qa["qa_pairs"]):
         query = qa["query"]
         expected = qa["expected_answer"]
         deprecated = qa.get("deprecated_terms_in_context", [])
+        query_id = qa.get("query_id", f"query_{idx}")
+        expected_rationale = qa.get("expected_rationale", "")
+        expected_command = qa.get("expected_command", "")
 
         log(f"\n  [Q{idx+1}]: {query}")
 
         try:
             retrieved_data = retriever.retrieve(query)
-            response = generator.generate(retrieved_data, query)
+            response = generator.generate(retrieved_data, query + appender) # Apply appender here
             response_text = response.answer if hasattr(response, "answer") else str(response)
             log(f"  [A{idx+1}]: {str(response_text)[:400]}")
         except Exception as e:
@@ -230,10 +252,13 @@ def main():
             response_text = f"[VersionRAG Error]: {e}"
 
         qa_results.append({
+            "query_id": query_id,
             "query": query,
             "expected_answer": expected,
             "response": str(response_text).strip(),
             "deprecated_terms": deprecated,
+            "expected_rationale": expected_rationale,
+            "expected_command": expected_command,
         })
 
     # ------------------------------------------------------------------
