@@ -210,7 +210,7 @@ class VersionRAGRetrieverDatabase:
         if not query:
             return "Error: Parameter 'query' is required for content retrieval."
         
-        if not self.vdb.has_collection(collection_name=MILVUS_COLLECTION_NAME_VersionRAG):
+        if not self.vdb.has_collection(collection_name=MILVUS_COLLECTION_NAME_VERSIONRAG):
             return "no data indexed"
         
         # create vdb filter from params
@@ -228,7 +228,7 @@ class VersionRAGRetrieverDatabase:
         query_vectors = self.vdb_embedding.encode_queries([query])
 
         res = self.vdb.search(
-            collection_name=MILVUS_COLLECTION_NAME_VersionRAG,
+            collection_name=MILVUS_COLLECTION_NAME_VERSIONRAG,
             data=query_vectors,
             limit=entity_limit,  # number of returned entities
             output_fields=[MILVUS_META_ATTRIBUTE_TEXT, 
