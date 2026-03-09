@@ -234,7 +234,6 @@ def main():
     appender = get_baseline_generation_append(args.domain) if 'get_baseline_generation_append' in globals() else ""
     for idx, qa in enumerate(gt_qa["qa_pairs"]):
         query = qa["query"]
-        expected = qa["expected_answer"]
         deprecated = qa.get("deprecated_terms_in_context", [])
         query_id = qa.get("query_id", f"query_{idx}")
         expected_rationale = qa.get("expected_rationale", "")
@@ -254,11 +253,10 @@ def main():
         qa_results.append({
             "query_id": query_id,
             "query": query,
-            "expected_answer": expected,
-            "response": str(response_text).strip(),
-            "deprecated_terms": deprecated,
             "expected_rationale": expected_rationale,
             "expected_command": expected_command,
+            "response": str(response_text).strip(),
+            "deprecated_terms": deprecated,
         })
 
     # ------------------------------------------------------------------
