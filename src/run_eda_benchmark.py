@@ -240,10 +240,18 @@ def main():
             retrieved_data = retriever.retrieve(query)
             response = generator.generate(retrieved_data, query + appender) # Apply appender here
             response_text = response.answer if hasattr(response, "answer") else str(response)
+            
+            # Extract retrieval detail texts
+            if isinstance(retrieved_data, list):
+                retrieval_detail = "\n\n---\n\n".join([str(doc) for doc in retrieved_data])
+            else:
+                retrieval_detail = str(retrieved_data)
+                
             log(f"  [A{idx+1}]: {str(response_text)[:400]}")
         except Exception as e:
             log(f"  [Error Q{idx+1}]: {e}")
             response_text = f"[VersionRAG Error]: {e}"
+            retrieval_detail = "N/A"
 
         qa_results.append({
             "query_id": query_id,
@@ -252,6 +260,7 @@ def main():
             "expected_command": expected_command,
             "response": str(response_text).strip(),
             "deprecated_terms": deprecated,
+            "retrieval_detail": retrieval_detail
         })
 
     # ------------------------------------------------------------------
