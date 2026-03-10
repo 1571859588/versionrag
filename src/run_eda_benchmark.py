@@ -16,8 +16,7 @@ Input files:
 Usage:
   cd baselines/versionrag/src
   python run_eda_benchmark.py \
-    --v1-text ../../../benchmark/test_markdown/v1.md \
-    --v2-text ../../../benchmark/test_markdown/v2.md \
+    --versions ../../../benchmark/test_markdown/v1.md ../../../benchmark/test_markdown/v2.md ../../../benchmark/test_markdown/v3.md \
     --gt-dir ../../../benchmark/gts \
     --output-dir ../../../results/versionRAG
 
@@ -70,10 +69,8 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="VersionRAG EDA Benchmark — non-interactive adapter"
     )
-    parser.add_argument("--v1-text", required=True,
-                        help="Path to v1 Markdown or PDF file")
-    parser.add_argument("--v2-text", required=True,
-                        help="Path to v2 Markdown or PDF file")
+    parser.add_argument("--versions", nargs="+", required=True,
+                        help="Path to all sequential Markdown or PDF files")
     parser.add_argument("--gt-dir", required=True,
                         help="Path to ground truth directory (qa_pairs.json etc.)")
     parser.add_argument("--output-dir", default="../../../results/versionRAG",
@@ -141,19 +138,17 @@ def main():
     log("=" * 70)
 
     # Validate inputs
-    for path, name in [(args.v1_text, "v1"), (args.v2_text, "v2"), (args.gt_dir, "gt-dir")]:
+    for path in args.versions:
         abs_p = os.path.abspath(path)
         if not os.path.exists(abs_p):
-            log(f"ERROR: {name} path not found: {abs_p}")
+            log(f"ERROR: version path not found: {abs_p}")
             sys.exit(1)
-
-    v1_path = os.path.abspath(args.v1_text)
-    v2_path = os.path.abspath(args.v2_text)
+            
+    v_paths = [os.path.abspath(p) for p in args.versions]
     gt_dir = os.path.abspath(args.gt_dir)
 
     log(f"\n[0] Inputs:")
-    log(f"  V1:     {v1_path}")
-    log(f"  V2:     {v2_path}")
+    log(f"  Versions: {v_paths}")
     log(f"  GT dir: {gt_dir}")
     log(f"  Output: {output_dir}")
     log(f"  Rebuild: {args.rebuild}")
@@ -201,7 +196,7 @@ def main():
         from indexing.versionrag_indexer import VersionRAGIndexer
 
         indexer = VersionRAGIndexer()
-        data_files = [v1_path, v2_path]
+        data_files = v_paths
         log(f"  -> Files: {[os.path.basename(p) for p in data_files]}")
 
         try:
@@ -287,9 +282,8 @@ def main():
         "baseline": "VersionRAG",
         "timestamp": timestamp,
         "config": {
-            "v1_input": v1_path,
-            "v2_input": v2_path,
-            "input_type": "markdown" if v1_path.lower().endswith(".md") else "pdf",
+            "versions": v_paths,
+            "input_type": "markdown" if v_paths[0].lower().endswith(".md") else "pdf",
         },
         "qa_results": qa_results,
         "ers_rationale": str(evo_rationale).strip(),
