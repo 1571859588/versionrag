@@ -118,6 +118,17 @@ def clear_milvus_collection(collection_name: str):
         print(f"  Warning: could not drop Milvus collection: {e}")
 
 
+def clear_neo4j_graph():
+    """Clear the Neo4j database."""
+    try:
+        from util.graph_client import GraphClient
+        client = GraphClient()
+        with client.session() as session:
+            session.run("MATCH (n) DETACH DELETE n")
+        print("  Cleared Neo4j graph database.")
+    except Exception as e:
+        print(f"  Warning: could not clear Neo4j database: {e}")
+
 def clear_knowledge_graph():
     """Clear the VersionRAG knowledge graph pickle."""
     from util.constants import KNOWLEDGE_GRAPH_PATH
@@ -181,6 +192,7 @@ def main():
         log("  --rebuild flag: clearing existing index and graph...")
         clear_milvus_collection(MILVUS_COLLECTION_NAME_VERSIONRAG)
         clear_knowledge_graph()
+        clear_neo4j_graph()
 
     # Check if index already exists (skip re-indexing)
     from util.constants import MILVUS_DB_PATH, KNOWLEDGE_GRAPH_PATH
