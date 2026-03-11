@@ -45,15 +45,22 @@ def cluster_documentation(data_files: list[FileAttributes]):
         for i, data_file in enumerate(sorted_data_files)
     )
     all_categories_with_description = "\n".join(f"{i} documentation name: {data_file.documentation}\n {i} description: {data_file.description}\n {i} filename: {os.path.basename(data_file.data_file)}" for i, data_file in enumerate(data_files))
-    response = llm_client.generate(system_prompt=system_prompt, user_prompt=all_categories_with_description)
-    response = response.replace("```json", "").replace("```", "").strip()
-    try:
-        data = json.loads(response)
-        parsed_result = data.get("clusters", [])
-    except:
-        raise ValueError(f"error during clustering result parsing {response}")
     
-    for cluster in parsed_result:
+    max_attempts = 3
+    parsed_result = []
+    for attempt in range(max_attempts):
+        try:
+            response = llm_client.generate(system_prompt=system_prompt, user_prompt=all_categories_with_description)
+            if not response:
+                raise ValueError("Empty response from LLM")
+            response = response.replace("```json", "").replace("```", "").strip()
+            data = json.loads(response)
+            parsed_result = data.get("clusters", [])
+            break
+        except Exception as e:
+            print(f"clustering documentation attempt {attempt + 1} failed: {e}")
+            if attempt >= max_attempts - 1:
+                raise ValueError(f"error during clustering result parsing: {e}")
         cluster_name = cluster["cluster_name"]
         cluster_description = cluster["cluster_description"]
         indices = cluster["category_indices"]
@@ -115,12 +122,19 @@ def cluster_categories(documentations: list):
     print(all_documentations_with_description)
     max_attempts = 3
     for attempt in range(max_attempts):
-        response = llm_client.generate(system_prompt=system_prompt, user_prompt=all_documentations_with_description)
-        response = response.replace("```json", "").replace("```", "").strip()
         try:
+            response = llm_client.generate(system_prompt=system_prompt, user_prompt=all_documentations_with_description)
+            if not response:
+                raise ValueError("Empty response from LLM")
+            response = response.replace("```json", "").replace("```", "").strip()
             data = json.loads(response)
+            
+            if not isinstance(data, dict):
+                raise ValueError(f"Parsed JSON is not a dictionary: {data}")
+                
             return data.get("categories", [])
-        except json.JSONDecodeError:
-            if attempt >= max_attempts:
-                raise ValueError(f"Error during clustering result parsing after {max_attempts} attempts: {response}")
+        except Exception as e:
+            print(f"clustering categories attempt {attempt + 1} failed: {e}")
+            if attempt >= max_attempts - 1:
+                raise ValueError(f"Error during clustering result parsing after {max_attempts} attempts: {e}")
     

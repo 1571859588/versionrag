@@ -34,6 +34,10 @@ class LLMClient:
     
 
     def generate(self, system_prompt: str, user_prompt: str):
+        if self.json_format:
+            # We enforce json output via prompt instead of API constraint to avoid NoneType issues
+            system_prompt += "\n\nIMPORTANT: You must return ONLY a valid JSON object wrapped in ```json ... ``` formatting. Do NOT wrap it in any other text."
+
         if LLM_MODE == 'openai':
             # Model name configurable via VERSIONRAG_LLM_MODEL env var
             model_name = os.getenv('VERSIONRAG_LLM_MODEL', 'gpt-4o-mini')
@@ -47,26 +51,33 @@ class LLMClient:
 
             if self.temp is not None:
                 kwargs["temperature"] = self.temp
-
-            if self.json_format:
-                kwargs["response_format"] = {"type": "json_object"}
                 
             response = self.client.chat.completions.create(**kwargs)
-            return response.choices[0].message.content
+            if not getattr(response, 'choices', None):
+                return ""
+            content = response.choices[0].message.content
         elif LLM_MODE == 'groq':
             response = self.client.invoke(system_instruction=system_prompt, input=user_prompt)
-            return response.content
+            content = response.content
         else:
             config = {}
             if self.temp is not None:
                 config["temperature"] = self.temp
-
-            if self.json_format:
-                config["response_format"] = {"type": "json_object"}
             
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ]
             response = self.client.respond({"messages": messages}, config=config)
-            return response.content
+            content = response.content
+            
+        if self.json_format:
+            import re
+            # Extract content within ```json ... ``` or just ``` ... ```
+            match = re.search(r'```(?:json)?\s*(.*?)\s*```', content, re.DOTALL)
+            if match:
+                return match.group(1).strip()
+            # If no code block is found, assume the entire content might be valid JSON
+            return content.strip()
+        else:
+            return content
