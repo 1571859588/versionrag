@@ -121,18 +121,25 @@ def extract_attributes_from_first_page(first_page_content):
     for attempt in range(max_attempts):
         try:
             first_page_response = llm_client.generate(system_prompt=system_prompt_first_page, user_prompt=first_page_content)
-
+            
+            if not first_page_response:
+                raise ValueError("Empty response from LLM")
+            
             # Convert JSON string to a Python dictionary
             first_page_response = first_page_response.replace("```json", "").replace("```", "").strip()
             data = json.loads(first_page_response)
+            
+            if not isinstance(data, dict):
+                raise ValueError(f"Parsed JSON is not a dictionary: {data}")
+                
             # Ensure at least one of "version" or "version_date" is present
-            if data["version"] == "unknown":
+            if data.get("version", "unknown") == "unknown":
                 raise ValueError("Error: 'version' must be provided. ")
             return data
         except Exception as e:
-            print(f"error during extraction: {e}")
-            if attempt >= max_attempts:
-                raise ValueError(f"Error: failed to parse llm response:\n response: {first_page_response}\n input:{first_page_content}")
+            print(f"error during extraction (attempt {attempt+1}/{max_attempts}): {e}")
+            if attempt >= max_attempts - 1:
+                raise ValueError(f"Error: failed to parse llm response:\n response: {first_page_response if 'first_page_response' in locals() else 'None'}\n input:{first_page_content}")
     raise ValueError(f"unable to extract attributes from first page\n first page: {first_page_content}")
 
 def extract_file_type_from_pages(pages_content):
@@ -166,11 +173,18 @@ def extract_file_type_from_pages(pages_content):
     for attempt in range(max_attempts):
         try:
             response = llm_client.generate(system_prompt=system_prompt_file_type, user_prompt=pages_content)
+            if not response:
+                raise ValueError("Empty response from LLM")
+            response = response.replace("```json", "").replace("```", "").strip()
             data = json.loads(response) 
+            
+            if not isinstance(data, dict):
+                raise ValueError(f"Parsed JSON is not a dictionary: {data}")
+                
             answer = data.get("answer")
             if answer is not None and str(answer).isdigit():
                 return FileType(int(answer))
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
+        except Exception as e:
             print(f"Attempt {attempt + 1} failed: {e}")
 
     raise ValueError('Unable to extract file type from file')
